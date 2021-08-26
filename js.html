@@ -1,0 +1,234 @@
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    const apikey = "C8HAXR";
+    const baseurl = "https://fanlogy.webflow.io/sign-up";
+    const homeurl = "https://fanlogy.webflow.io";
+    const scriptURL = 'https://script.google.com/macros/s/AKfycbydTAm4kkyUY6Qass_hZj0Y1Do68Bq-zvkrA-WRWo4ONH9kbaKV7U-zib734HiGv4edPg/exec'
+
+    const queryString = window.location.search;
+
+    Webflow.push(function() {
+        // Disable submitting form fields during development
+        $('signup').submit(function() {
+
+            return false;
+        });
+    });
+    $('#signup').submit(function() {
+        return false;
+    });
+
+    ref_id = getRefId();
+    if (localStorage["ref_email"] != undefined) {
+
+        if ((localStorage['ref_id'] == ref_id) || (ref_id == null)) {
+            queryWaitlist();
+        } else {
+
+            localStorage['ref_id'] = ref_id;
+            changeState('active');
+        }
+    } else {
+        localStorage['ref_id'] = ref_id;
+        changeState('active');
+    }
+
+
+    function getRefId() {
+        if (queryString) {
+            const urlParams = new URLSearchParams(queryString);
+            if (urlParams.has('ref')) {
+                ref_id = urlParams.get('ref');
+                return ref_id;
+            }
+        }
+        return null;
+    }
+
+
+    function changeState(state) {
+        if (state == 'active') {
+            document.getElementById('successstate').style.display = "none";
+            document.getElementById('signup').style.display = "block";
+        } else {
+            document.getElementById('successstate').style.display = "block";
+            document.getElementById('signup').style.display = "none";
+        }
+    }
+
+
+
+
+
+    // listener
+    const form = document.getElementById("signup");
+    form.addEventListener('submit', e => {
+        e.preventDefault();
+        document.getElementById('errorstate').style.display = "none";
+        // document.getElementById("signup").submit();
+        waitlistapi(form['Email']);
+
+    })
+
+
+    //Google form data submission
+    function googleUpdate() {
+        fetch(scriptURL, {
+                method: 'POST',
+                body: new FormData(form)
+            })
+            .then(response => {
+                console.log("Google form updated", response)
+            })
+            .catch(error => console.log("Google form updating error", error));
+    }
+
+    //waitlist querying
+    function queryWaitlist() {
+        var myHeaders = new Headers();
+        myHeaders.append("Content-Type", "application/json");
+
+        var raw = JSON.stringify({
+            "api_key": apikey,
+            "email": localStorage['ref_email']
+        });
+
+        var requestOptions = {
+            method: 'POST',
+            headers: myHeaders,
+            body: raw,
+            redirect: 'follow'
+        };
+        fetch("https://getwaitlist.com/api/v1/users/status", requestOptions)
+            .then(response => response.json())
+            .then(result => {
+                if (result.registered_email == localStorage['ref_email']) {
+                    changeState('success');
+
+                    let url = new URL(result.referral_link);
+                    let params = new URLSearchParams(url.search);
+                    var ref_id = '';
+                    if (params.has('ref_id')) {
+                        ref_id = params.get('ref_id');
+                        $('#MyRefid').val(ref_id);
+
+                    }
+                    ref_link = homeurl + "?ref=" + ref_id;
+                    $('#current-state').html("You're currently at the " + result.current_priority + " position among " + result.total_users + " requests.");
+                    $('#reflink').html(ref_link);
+
+                    e = $('#contactform');
+                    scrollInto(e);
+                } else {
+                    changeState('active');
+                }
+                console.log(result);
+                // $('#refferlink').attr("href", result.referral_link);
+                // $('#refferlink').html(result.referral_link);
+            })
+            .catch(error => {
+                //To do : redirect if error
+                changeState('active');
+                //active
+                // localStorage["ref_email"] = null;
+                // localStorage['ref_id'] = null;
+                console.log("waitlist quering error", error);
+
+            });
+
+    }
+
+    //waitlist api calling
+    function waitlistapi(email) {
+        var myHeaders = new Headers();
+        myHeaders.append("Content-Type", "application/json");
+        if ((localStorage['ref_id'] == '') || (localStorage['ref_id'] == 'null') || (localStorage['ref_id'] == undefined)) {
+            ref_link = baseurl;
+            $('#Refid').val('');
+        } else {
+            ref_link = baseurl + "?ref_id=" + localStorage['ref_id'];
+            $('#Refid').val(localStorage['ref_id']);
+        }
+        var raw = JSON.stringify({
+            "api_key": apikey,
+            "email": email.value,
+            "referral_link": ref_link
+        });
+
+        localStorage['ref_email'] = email.value;
+
+        var requestOptions = {
+            method: 'POST',
+            headers: myHeaders,
+            body: raw,
+            redirect: 'follow'
+        };
+
+        fetch("https://getwaitlist.com/api/v1/waitlists/submit", requestOptions)
+            .then(response => response.json())
+            .then(result => {
+                console.log(result);
+                let url = new URL(result.referral_link);
+                let params = new URLSearchParams(url.search);
+                var ref_id = '';
+                if (params.has('ref_id')) {
+                    ref_id = params.get('ref_id');
+                    $('#MyRefid').val(ref_id);
+
+                }
+
+                googleUpdate();
+
+                ref_link = homeurl + "?ref=" + ref_id;
+                $('#current-state').html("You're currently at the " + result.current_priority + " position among " + result.total_users + " requests.");
+                $('#reflink').html(ref_link);
+
+                changeState('success');
+                e = $('#contactform');
+                scrollInto(e);
+            })
+            .catch(error => {
+                console.log('error in wait api calling', error);
+                localStorage['ref_email'] = undefined;
+
+                document.getElementById('errorstate').style.display = "block";
+                $('#errortext').html("Something went wrong, Please enter valid data!");
+
+                e = $('#errorstate');
+                scrollInto(e);
+            });
+
+    }
+
+    function scrollInto(e) {
+
+        var el = e;
+        var elOffset = el.offset().top;
+        var elHeight = el.height();
+        var windowHeight = $(window).height();
+        var offset;
+
+        if (elHeight < windowHeight) {
+            offset = elOffset - ((windowHeight / 2) - (elHeight / 2));
+        } else {
+            offset = elOffset;
+        }
+        var speed = 700;
+        $('html, body').animate({
+            scrollTop: offset
+        }, speed);
+
+    }
+
+    function copyToClipborad() {
+
+        var range = document.createRange();
+        range.selectNode(document.getElementById("reflink"));
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(range);
+        document.execCommand("copy");
+        window.getSelection().removeAllRanges();
+    }
+</script>
